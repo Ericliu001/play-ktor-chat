@@ -4,6 +4,7 @@ import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import java.util.*
 
 fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 
@@ -11,12 +12,27 @@ fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 fun Application.module() {
     install(WebSockets)
     routing {
+        val connections = Collections.synchronizedSet<Connection?>(LinkedHashSet())
         webSocket("/chat") {
-            send("You are connected!")
-            for (frame in incoming) {
-                frame as? Frame.Text ?: continue
-                val receivedText = frame.readText()
-                send("You said: $receivedText")
+            println("Adding user!")
+            val thisConnection = Connection(this)
+            connections.add(thisConnection)
+
+            try {
+                send("You are connected! There are ${connections.count()} users here.")
+                for (frame in incoming) {
+                    frame as? Frame.Text ?: continue
+                    val receivedText = frame.readText()
+                    val textWithUsername = "[${thisConnection.name}]: $receivedText"
+                    connections.forEach {
+                        it.session.send(textWithUsername)
+                    }
+                }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                println("Removing $thisConnection!")
+                connections.remove(thisConnection)
             }
         }
     }
